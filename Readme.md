@@ -1,102 +1,70 @@
-# **Point of Adversarial-Example Success (PAES) \-**
+# Point of Adversarial-Example Success (PAES)
 
-In security-focused applications, it only takes a single or small number of breaches for losses to become untenable, or for a system to be rendered unfit for purpose.
+**Point of Adversarial-Example Success (PAES)** is an experimental metric for evaluating adversarial robustness in security-focused machine-learning systems. It is designed around a simple operational question: **how many inference-time adversarial queries does it take before an attacker achieves a targeted misclassification?**
 
-Conversely, in high-value defensive contexts, a threat actor’s goal and motivation may be satisfied by a single breach.
+In many security contexts, average model performance is not enough. A system may be considered unsafe if an attacker can achieve even one successful targeted misclassification within a realistic query budget. This is especially relevant where a model acts as part of an access-control, identity-verification, triage, or decision-support system. In those settings, a single failure can be operationally serious, even if the model performs well on average.
 
-In tandem, input validation may easily catch and prevent repeated misclassification attempts, or slow them enough to make an attack inviable.
+PAES reframes adversarial robustness from the perspective of attacker effort. Rather than only asking whether an attack can succeed across a test set, it asks how much interaction with the model is required before the first successful adversarial example is found. This makes query count a useful operational signal: repeated failed attempts may be rate-limited, logged, blocked, or investigated, while fast success suggests that the system may be fragile in realistic deployment conditions.
 
-Respecting the heavy constraints on the attack surface — but also the potential impact of even a single failure — the author proposes the metric **PAES**, or **Point of Adversarial-Example Success,** a query-based operational metric.
+PAES is closely related to **Adversarial Success Rate (ASR)**. ASR measures the proportion of attacks that succeed across a dataset or evaluation run. PAES instead focuses on the query count required for success. Two models may have the same ASR, but very different security properties if one can be compromised in tens of queries while the other requires thousands. PAES is therefore intended to complement ASR, not replace it.
 
----
+Formally, PAES is defined as the number of inference-time adversarial queries required for an attacker to achieve a targeted misclassification under a black-box, decision-based attack model. In simple terms: PAES = number of attacker queries before first successful targeted misclassification.
 
-## **Definition**
+A higher PAES value suggests that the model imposes a greater operational cost on the attacker under the specified threat model. A lower PAES value suggests that successful adversarial examples can be found quickly, making the system easier to compromise.
 
-**Point of Adversarial-Example Success (PAES)** 
+The current threat model assumes black-box access. The attacker cannot inspect model weights, gradients, training data, or internal confidence scores. The attacker can only submit inputs and observe the final hard-label decision, such as a class label or accept/reject result. The attack is targeted: the goal is not merely to cause any misclassification, but to force the model toward a chosen target class or identity. This makes the framing relevant to facial-recognition-style systems, identity checks, and other settings where an attacker wants to be accepted as a specific target.
 
-The number of inference-time adversarial queries q required for an attacker to achieve a targeted misclassification under a black-box, decision-based attack model.
+The initial attack method considered for PAES is **HopSkipJumpAttack (HSJ)**, implemented through the IBM Adversarial Robustness Toolbox. HSJ is appropriate for this project because it is a decision-based black-box attack and can operate using hard-label outputs. The evaluation records whether the attack succeeds within a fixed query budget and, if so, the query number at which the first targeted success occurs.
 
-**Built from:** *Adversarial Success Rate (ASR)*
+The initial application area is image classification and facial-recognition-style models. Planned or initial baselines include ResNet-18 as a practical lower-cost baseline and ResNet-50 as a stronger comparison model. The planned demonstration dataset is **CelebA**, a publicly available facial-attribute dataset commonly used in computer vision research. CelebA is useful here because it provides a recognisable image-classification setting while making the robustness problem easier to communicate to both technical and non-technical audiences.
 
-The **Adversarial Success Rate (ASR)**, as defined in *Croce & Hein (2020)* and used in *Chen et al. (2020)*, measures the proportion of inputs for which an adversarial attack succeeds in changing the model’s prediction.
+A related side metric is **FLOPs Until Success (FUSS)**. While PAES counts attacker queries, FUSS estimates the compute cost required before adversarial success. It can be approximated as: FUSS = PAES × estimated FLOPs per query.
 
-PAES re-expresses this concept for operational-security settings, focusing not on the overall fraction of successful attacks, but on the *effort or query count required* to achieve the first success.
+FUSS is intended as a rough, hardware-agnostic indicator of attacker cost. PAES remains the primary operational metric, but FUSS may be useful for reasoning about the longer-term arms race between attacker compute, model complexity, and defensive overhead.
 
-**Side metric – FLOPs Until Success (FUSS)** 
+A typical PAES evaluation should record the model architecture, dataset, target class or identity, attack method, query budget, success status, query count at first success, and any relevant perturbation or detector behaviour. If FUSS is used, the evaluation should also record the estimated FLOPs per query.
 
-A hardware-agnostic estimate of compute cost, intended as a long-term indicator of the arms race between attacker and defender. FUSS is derived directly from PAES.
+Example result:
 
----
+- model: resnet18
+- attack: HopSkipJump
+- targeted: true
+- query_budget: 10000
+- success: true
+- paes: 742
+- fuss: 134500000000
+- dataset: CelebA
 
-## **1 Trustworthiness and Application**
+The project is intended as a research and implementation exercise, not as a finished production ML package. The aim is to formalise the PAES metric, implement baseline experiments, and test whether query-to-first-success provides a useful operational robustness signal for security-relevant ML systems.
 
-**Aspect:** Security -> Robustness under targeted, black-box attacks.
+## Tooling
 
-**Goal:** Measure the operational robustness of image classifiers (e.g. facial-recognition systems) under targeted, decision-based black-box attacks.
+The expected tooling includes PyTorch and torchvision for model training and evaluation, IBM Adversarial Robustness Toolbox for adversarial attacks, HopSkipJumpAttack for decision-based black-box testing, and ptflops, fvcore, or torch.profiler for FLOP estimation. The project may also be integrated into the A4S evaluation framework as a model metric.
 
-**Threat model:**
+## Dataset
 
-A black-box adversary can query the system and observe only a hard label or accept/reject outcome, attempting to force misclassification toward a chosen target.
+The planned demonstration dataset is CelebA.
 
----
+Dataset link: https://mmlab.ie.cuhk.edu.hk/projects/CelebA.html
 
-## **2 Class of Models the Metric Applies To**
+## References
 
-* Image classifiers & facial-recognition models (CNNs / ResNets / ViTs)
+Dong, Y. et al. (2019). *Efficient Decision-Based Black-Box Adversarial Attacks on Face Recognition*. CVPR 2019.
 
-**Primary experiments:**
+Chen, J., Jordan, M., and Wainwright, M. (2020). *HopSkipJumpAttack: A Query-Efficient Decision-Based Attack*. IEEE Symposium on Security and Privacy 2020.
 
-* **ResNet-18** — practical baseline, initial testing, lower compute cost
+Sharif, M. et al. (2016). *Accessorize to a Crime: Real and Stealthy Attacks on State-of-the-Art Face Recognition*. CCS 2016.
 
-* **ResNet-50** — stronger baseline
+Carlini, N. and Wagner, D. (2017). *Towards Evaluating the Robustness of Neural Networks*. IEEE Symposium on Security and Privacy 2017.
 
----
+Madry, A. et al. (2018). *Towards Deep Learning Models Resistant to Adversarial Attacks*. ICLR 2018.
 
-## **3 Working Assumptions**
+OECD.AI catalogue: *Time until adversary’s success* as a related conceptual framing.
 
-* **Black-box query model:** the attacker can submit inputs and receive only the final label or decision.
+## Status
 
-* **Attack model used:** HopSkipJump (HSJ), implemented in the IBM Adversarial Robustness Toolbox.
+This is an early-stage research and implementation project. The current focus is to define the metric clearly, build baseline experiments, and evaluate whether PAES offers a useful way to describe adversarial robustness in operational security terms.
 
-* **Targeted objective:** attacker aims for a specific target identity/label; success \= target accepted, thereby modelling unauthorised access attempts.
+## Disclaimer
 
-* **Detection model:** detectors applied per query.
-
-* **Budgeting:** the attack halts on success or when the query budget is reached.
-
----
-
-## **4 Scientific References (Papers & Grounding)**
-
-* Dong Y. et al. (2019). *Efficient Decision-Based Black-Box Adversarial Attacks on Face Recognition.* CVPR 2019\.
-
-* Chen J., Jordan M., Madry A. (2020). *HopSkipJumpAttack: A Query-Efficient Decision-Based Attack.* CVPR 2020\.
-
-* Sharif M. et al. (2016). *Accessorize to a Crime: Real and Stealthy Attacks on State-of-the-Art Face Recognition.* CCS 2016\.
-
-* Carlini N., Wagner D. (2017). *Towards Evaluating the Robustness of Neural Networks.* IEEE S\&P 2017\.
-
-* Madry A. et al. (2018). *Towards Deep Learning Models Resistant to Adversarial Attacks.* ICLR 2018\.
-
-* OECD.AI catalogue — *Time until adversary’s success* **(conceptual ancestor)**
-
-**Toolkits / implementations**
-
-* **Adversarial Robustness Toolbox (ART)** — HopSkipJump, Square, Carlini & Wagner attacks
-
-* **ptflops / fvcore / torch.profiler** — FLOP estimation
-
-* **PyTorch / torchvision** — training & models
-
-* **A4S evaluation framework** — metric integration via @model\_metric
-
----
-
-## **5 Dataset**
-
-**CelebA** — publicly available facial-attribute dataset suitable for research use.
-
-A lively **demonstration** dataset (PAES ≈ “pays”) that can also communicate robustness concepts clearly to **non-technical stakeholders**.
-
- [https://mmlab.ie.cuhk.edu.hk/projects/CelebA.html](https://mmlab.ie.cuhk.edu.hk/projects/CelebA.html)
-
+This project is for defensive research, robustness evaluation, and educational purposes. It is intended to support safer ML system design by making adversarial effort more measurable and interpretable.
